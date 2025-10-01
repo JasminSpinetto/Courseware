@@ -16,6 +16,8 @@
 
 ### schema of the event types for the running example
 
+In the schema elements are defined with property_name and property_tipe:
+
 ```
 create schema TemperatureSensorEvent (
 sensor string,
@@ -96,7 +98,7 @@ Execution mode: Data points enter the query that filters them
 
 
 ##### The Event-Based System Style
-
+Equivalent to Q0 as result but the filtering of the data is done directly in the query and the data isn't loaded fully:
 ```
 @Name('Q0bis')
 select *
@@ -107,7 +109,10 @@ visually
 
 ![](img/Q0bis.png)
 
-Execution mode: data points are filtered before flowing into the query and the query execution does not get triggered
+Execution mode: data points are filtered before flowing into the query and the query execution does not get triggered.
+
+- Low latency: Event-Based Style
+- High throughput: SQL-style
 
 
 #### Q1
@@ -143,7 +148,7 @@ The events received in the last 2 seconds every 2 seconds (a.k.a. **logical tumb
 ```
 @Name('Q3')
 select *
-from TemperatureSensorEvent.win:time_batch(2 seconds);
+from TemperatureSensorEvent.win:time_batch(2);
 ```
 
 #### Q4
@@ -151,7 +156,7 @@ from TemperatureSensorEvent.win:time_batch(2 seconds);
 The last 2 events received (a.k.a. **physical tumbling window**)
 
 ```
-@Name('Q3')
+@Name('Q4')
 select *
 from TemperatureSensorEvent.win:length_batch(2);
 ```
@@ -163,7 +168,7 @@ The events received in the last 4 seconds for every event (a.k.a. **logical slid
 ```
 @Name('Q5')
 select *
-from TemperatureSensorEvent.win:time(4 seconds);
+from TemperatureSensorEvent.win:time(4);
 ```
 
 Note: it appears to emit only the event it receives when it receives it ...
@@ -175,7 +180,7 @@ The last 4 events received for every event (a.k.a. **physical sliding window**)
 ```
 @Name('Q6')
 select *
-from TemperatureSensorEvent.win:length(2 seconds);
+from TemperatureSensorEvent.win:length(2);
 ```
 
 Note: it appears to emit only the event it receives when it receives it ... and it appears to generate exactly the same results of Q5 ...
@@ -189,13 +194,13 @@ Assumption: the average should change as soon as they receive a new event
 ```
 @Name('Q7')
 select sensor, avg(temperature)
-from TemperatureSensorEvent.win:time(4 seconds)
+from TemperatureSensorEvent.win:time(4)
 group by sensor;
 ```
 
 #### Q1's vs. Q7's results 
 
-I am elaborating more on Q2 (landmark window) and the difference with Q7 (sliding window).
+I am elaborating more on Q1 (landmark window) and the difference with Q7 (sliding window).
 
 ![](img/EPL07.png)
 
@@ -217,7 +222,7 @@ the average temperature of the last 4 seconds every 4 seconds (a.k.a. **logical 
 ```
 @Name('Q9')
 select sensor, avg(temperature)
-from TemperatureSensorEvent.win:time_batch(4 seconds)
+from TemperatureSensorEvent.win:time_batch(4)
 group by sensor;
 ```
 
@@ -237,7 +242,7 @@ the average temperature of the last 4 seconds every 2 seconds (a.k.a. **logical 
 ```
 @Name('Q11')
 select sensor, avg(temperature)
-from TemperatureSensorEvent.win:time(4 seconds)
+from TemperatureSensorEvent.win:time(4)
 group by sensor
 output snapshot every 2 seconds;
 ```
@@ -264,13 +269,13 @@ Let's see the different behavior of the following queries.
 ```
 @Name('Q.agg.all')
 select sensor, avg(temperature) as avgTemp
-from TemperatureSensorEvent.win:time(10 seconds)
+from TemperatureSensorEvent.win:time(10)
 group by sensor
 output all every 5 seconds;
 
 @Name('Q.agg.snapshot')
 select sensor, avg(temperature) as avgTemp
-from TemperatureSensorEvent.win:time(10 seconds)
+from TemperatureSensorEvent.win:time(10)
 group by sensor
 output snapshot every 5 seconds;
 
