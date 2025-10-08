@@ -44,6 +44,9 @@ B={n=4}
 
 > the basics
 
+A = stream \
+x = pointer that I am matching with the stream
+
 match the first A
 
 ```
@@ -237,6 +240,10 @@ from StockTick.win:time(6 seconds)
 group by symbol 
 output last every 2 seconds;
 ```
+Whatever you put in "group by", also put it in "select".
+
+It's hard to say which type of window this is from the question. This one is an hopping window.
+If it were tumbling: *from StockTick:win.time_batch(6 sec)*. 
 
 NOTE: there are differences between `output last` and `output snapshot/all`. As a rule of thumb, use `last` when you assume that those downstream are always listening and do not want to be bothered unless new information becomes available. Use `snapshot` or `all` when you think those downstream do not remember what you told the last time and prefer the upstream query to repeat the complete answer.
 

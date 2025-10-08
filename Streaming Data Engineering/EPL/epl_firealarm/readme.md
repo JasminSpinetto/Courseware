@@ -421,3 +421,12 @@ We are very close to the solution of the running example; we "just" need to coun
 select count(*)
 from FireEvent.win:time(10 seconds);
 ```
+
+This outputs 0 and 1 alternatively because events enter and exit. If you want to see only the "result" of that second passing:
+
+```
+@Name('Q13')
+select count(*)
+from FireEvent.win:time(10 seconds);
+output first every 1 second;
+```
