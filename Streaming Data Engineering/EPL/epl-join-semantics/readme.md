@@ -82,15 +82,19 @@ Two or more event streams can be part of the from-clause, and thus, both (all) s
 ```
 @name('inner-window')
 select *
-from View#time(9 sec) as v
+from View#time(9 sec) as v  
      inner join
      Click#time(9 sec) as c
      on v.id = c.id;
 ```
+Don't join whole tables, put a time restriction. \
+'#' is an abbreviation for win:time
 ##### Result
 
 ![](https://cdn.confluent.io/wp-content/uploads/inner_stream-stream_join-768x475.jpg)
 
+Return event less than 9 seconds apart. \
+As you can see, here we return also "wrong" results (e.g. C click before C view shouldn't be accepted). The join doesn't allow for elaborated checks. Also for F1 and F2, it returns two matches even i it should be just one in reality. B is too far apart so no result.
 ```
  At: 2001-01-01 08:00:01.000
 
@@ -122,7 +126,7 @@ At: 2001-01-01 08:00:09.000
 
 Records A and C appear as expected, as the key appears in both streams within 9 seconds, even though they come in different order. Records B produce no result: although both records have matching keys, they do not appear within the time window. Records D and E don’t join because neither has a matching key contained in both streams. Records F and G appear two times as the keys appear twice in the view stream for F and in the clickstream for scenario G.
 
-#### Left join
+#### Left outer join
 
 The left join starts a computation each time an event arrives for either the left or right input stream. However, processing for both is slightly different. For input records of the left stream, an output event is generated every time an event arrives. If an event with the same key has previously arrived in the right stream, it is joined with the one in the primary stream. Otherwise, it is set to null. On the other hand, each time an event arrives in the right stream, it is only joined if an event with the same key previously arrived in the primary stream.
 
@@ -133,7 +137,8 @@ from View#time(9 sec) as v
         Click#time(9 sec) as c
         on v.id = c.id;
 ```
-
+Thinking about semantics: this is equivalent to sequel. Querying every second. \
+By compacting the stream, you only get the most recent answer for each variable. So instead of getting both (A, ) and (A,A) you only get (A,A).
 ##### Result
 
 ![](https://cdn.confluent.io/wp-content/uploads/left-stream-stream-join-768x459.jpg)
@@ -311,11 +316,12 @@ The concept of time is crucial. Joins depend on the time synchronization of even
 
 ### "Table" to "Table" and Stream to "Table" joins
 
-EPL offers three ways to build tables out of unbounded streams:
+When we talled about Stream to Relation operators, the Relation Tables where instantaneous. Now we want the final Table which is the compaction of all instantaneous Tables during the time span considered.\
+EPL offers three ways to build tables (to do compaction) out of unbounded streams:
 
-* The `keep all` window is a data window that retains all arriving events. However, care should be taken to remove events from the keep-all data window in a timely manner.
-* The `unique` window is a window that includes only **the most recent** among **events** having the same value(s) for the result of the specified expression or list of expressions.
-* The `create Table` statement with the corresponding `insert into` aggregation query since they are holders for aggregation state
+* The `keep all` window is a data window that retains all arriving events. However, care should be taken to remove events from the keep-all data window in a timely manner because it will explode. This is the Kafka way, it also keeps duplicates;
+* The `unique` window is a window that includes only **the most recent** among **events** having the same value(s) for the result of the specified expression or list of expressions. Also this must be sized smartly;
+* The `create Table` statement with the corresponding `insert into` aggregation query since they are holders for aggregation state. Used to include conditions for entering the table.
   
 `unique` windows implement the ktable abstraction of Kafka Stream described in the original article. In Kafka-agnostic terminology, they are named **materialized view**s. In the following, we call them simply **Table**s even if this term collides with EPL Tables (for more information, see [2.14.2. Tables](http://esper.espertech.com/release-9.0.0/reference-esper/html/processingmodel.html#processingmodel_infra_table) in EPL documentation).
 
@@ -336,6 +342,10 @@ from View#unique(id) as v
 ![](https://cdn.confluent.io/wp-content/uploads/Inner-Table-Table-Join-768x727.jpg)
 
 ```
+Notice: there are two different compacted versions at second 6 where both F1 and F2 arrive. But at second 6 F still hasn't arrived. Once time passes to 7, compaction with unique happens and F only sees F2. With G this doesn't happen, both G1 and G2 are kept because it works this way:
+- You receive G1, you see G and generate result;
+- You receive G2, you again see G and generate result;
+
  At: 2001-01-01 08:00:01.000
 
     Insert
@@ -541,7 +551,7 @@ This join is pretty close to SQL semantics and, thus, easy to understand. The di
 
 The `unidirectional` keyword can be used in the from clause to identify streams that provide the events to execute the join. If the keyword is present for a stream, all other streams in the from clause become passive streams. When events arrive or leave a data window of a passive stream, then the join does not generate join results. 
 
-Therefore, the `unidirectional` keyword makes the stream-table join asymmetric: only the (left) stream input triggers a join computation. Because the join is not-windowed, the (left) input stream is stateless, and thus, join lookups from table records to stream records are not possible.
+Therefore, the `unidirectional` keyword makes the stream-table join asymmetric: only the (left) stream input triggers a join computation, if changes happen in the table, nothing happens in the stream. Because the join is not-windowed, the (left) input stream is stateless, and thus, join lookups from table records to stream records are not possible.
 
 This semantics is usually used to enrich a data stream with auxiliary information from a table. However, for the example in use, we'll use the *"views"* as the left stream and *"clicks"* as the right table input.
 
@@ -549,9 +559,9 @@ This semantics is usually used to enrich a data stream with auxiliary informatio
 ```
 @name('inner-stream-table')
 select *
-from View as v
+from View as v \\take everything from View
      unidirectional inner join
-     Click#unique(id) as c
+     Click#unique(id) as c \\for a specific click
      on v.id = c.id;
 ```
 ##### Result
