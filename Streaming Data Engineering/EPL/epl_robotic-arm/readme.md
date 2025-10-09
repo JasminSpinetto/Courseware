@@ -30,7 +30,7 @@ create schema RoboticArm(id int, status string);
 create schema ForceSensingResistors(idArm string, stressLvl int)
 ```
 
-The **pragmatism**, on the contrary, pushes for the minimum model that allows the continuous process of the data so to satisfy the needs presented in the following point (from Q2 to Q5). If you read them, you may understand that they are possible also with a much simpler model:
+The **pragmatism**, on the contrary, pushes for the minimum model that allows the continuous process of the data so to satisfy the needs presented in the following point (from Q2 to Q5). This is more efficient because we avoid joins betweens events. If you read them, you may understand that they are possible also with a much simpler model:
 
 ```
 create schema RoboticArm( id string, status string, stressLevel int );
@@ -90,10 +90,10 @@ t=t.plus(1 seconds)
 Another best practice is always to **state your assumptions**:
 
 * The arm sends an event only when its status changes.
-* The status can only appear in the order listed in the text above.
-* If an arm stops due to a fault, it stops sending events.
+* The status can only appear in the order listed in the text above and with no values different from the one stated.
+* If an arm stops due to a fault, it stops sending events. Whenever I receive a continuous flow of events, it means that the arm is active.
 * When an arm restarts after a fault, it is always in the status ready.
-* The stress level in each event is the maximum the arm experienced between the reported status and the previous one (for coherence with question Q2).
+* The stress level in each event is the maximum the arm experienced between the reported status and the previous one (for coherence with question Q2). Stress doesn't significantly change during the movement of one single status (this means we can associate a single stress level to each event).
 
 ### Q2 
 
@@ -103,16 +103,16 @@ Declare a continuous query that emits the maximum stress for each arm.
 
 ```
 @Name("Q2") 
-SELECT id, max(stressLevel) 
-FROM RoboticArm 
-GROUP BY id;
+SELECT id, max(stressLevel) \\ you want output in this order
+FROM RoboticArm \\get data from this stream
+GROUP BY id; \\distinguish data for each RoboticArm
 ```
-
+Each event triggers the query. When the query is triggered, it outputs for the ID of that event the max(stressLevel) reached until that point in time by that specific RoboticArm.
 ### Q3 
 
 Declare a continuous query that emits the average stress level between a pick (status==goodGrasped) and a place (status==placingGood). 
 
-HINT: Sometimes you cannot compute an average using the aggregate operator `avg`
+HINT: Sometimes you cannot compute an average using the aggregate operator `avg`. in this case, for example, there's no "StressLevel" schema to be queried. We need address it passing through the RoboticArm schema.
 
 #### Solution
 
@@ -124,6 +124,7 @@ FROM pattern [
 		  	b=RoboticArm(id = a.id, status="movingGood") ->
 		  	c=RoboticArm(id = a.id, status="placingGood")  ];
 ```
+Inserting the "id" inside the pattern allows us to do a self join between events corresponding to the SAME arm. 
 
 ### Q4
 
@@ -139,7 +140,7 @@ Declare a continuous query that returns the robotic arms that,
 ```
 @Name("E4") 
 insert into warning
-SELECT a.id 
+SELECT a.id AS arm
 FROM pattern [ 
 	every	a=RoboticArm(status="goodGrasped", stressLevel < 7) ->
 			(
@@ -149,13 +150,14 @@ FROM pattern [
 			where timer:within(10 seconds)
 		] ;
 ```
-
+The brackets are needed to specify that we want the timer to start counting from the matching of 'a'. It wants both b and c to happen before 10 seconds. If it goes above 10 seconds, it doesn't even look for events b and/or c. 
 ### Q5
 
 Declare a continuous query that monitors the results of the previous one (i.e., Q4) and counts how many times each robotic arm is present in the stream over a window of 10 seconds, updating the counting every 2 seconds.
 
 #### Solution
 
+Add "insert into warning" in Q4.
 ```
 @Name("Q5") 
 select arm, count(*)
@@ -163,6 +165,9 @@ from warning.win:time(10 sec)
 group by arm
 output last every 2 sec;
 ```
+We use a logical hopping window because we want to output every 2 seconds.
+
+We choose last but also snapshot would be okay. 
 
 ## Bonus content
 
